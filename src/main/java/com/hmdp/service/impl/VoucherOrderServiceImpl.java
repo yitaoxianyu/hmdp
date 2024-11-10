@@ -8,6 +8,7 @@ import com.hmdp.mapper.VoucherOrderMapper;
 import com.hmdp.service.IVoucherOrderService;
 import com.hmdp.utils.RedisWorker;
 import com.hmdp.utils.UserHolder;
+import org.springframework.aop.framework.AopContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,6 +35,10 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     //resource和autowired的区别：
     //resource注入首先会根据注入的名称查找对应的bean，之后再根据类名来找
     //autowired则会先去优先找对应的类名
+
+    //更新数据库时可能会出现，两个线程查询到的数据是一样的，但是有一个快一个慢，导致他们都会对库存进行减一
+    //也就是线程安全问题：多个线程对同一数据进行操作，可能会导致数据错误。
+    //可以加入乐观锁(有cas法和版本号法)
     @Resource
     private VoucherOrderServiceImpl voucherOrderService;
 
@@ -54,8 +59,29 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         if(seckillVoucher.getStock() < 1)
             return Result.fail("库存不足");
 
+        //这里虽然使用乐观锁实现了防止高并发导致的线程安全问题：库存超卖
+        //但是并没有限制用户一人只能买一单
+
+        Long userId = UserHolder.getUser().getId();
+        synchronized (userId.toString().intern()){
+            //这里调用的是对象本身的方法会导致事务失效
+            IVoucherOrderService iVoucherOrderService = (IVoucherOrderService)AopContext.currentProxy();
+            return iVoucherOrderService.createOrder(voucherId);
+        }
+    }
+
+    @Transactional
+    public Result createOrder(Long voucherId) {
+        Long userId = UserHolder.getUser().getId();
+        //这里可能会出现线程安全多个线程都获得了相同的数量，导致多次购买
+        Long count = query().eq("user_id", userId).eq("voucher_id", voucherId).count();
+        if(count > 0) return Result.fail("一个用户只能购买一次");
+        //这里要根据用户id来进行线程上锁
+
+
+        //乐观锁的概念:多个线程可能都会获取到相同的库存，但是有其中一个修改之后其他线程就终止。
         boolean success = seckillVoucherService.update().setSql("stock = stock - 1")
-                .eq("voucher_id",voucherId).update();
+                .eq("voucher_id", voucherId).gt("stock",0).update();
         if(!success) return Result.fail("库存更新失败");
 
         VoucherOrder voucherOrder = new VoucherOrder();
@@ -63,7 +89,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         long id = redisWorker.nextId("voucher");
         voucherOrder.setId(id);
         voucherOrder.setVoucherId(voucherId);
-        voucherOrder.setUserId(UserHolder.getUser().getId());
+        voucherOrder.setUserId(userId);
 
         voucherOrderService.save(voucherOrder);
         return Result.ok(id);
