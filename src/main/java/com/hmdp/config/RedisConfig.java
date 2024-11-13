@@ -1,6 +1,9 @@
 package com.hmdp.config;
 
 
+import org.redisson.Redisson;
+import org.redisson.api.RedissonClient;
+import org.redisson.config.Config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -26,5 +29,11 @@ public class RedisConfig {
 
         return redisTemplate;
     }
+    @Bean
+    public RedissonClient redissonClient(){
+        Config config = new Config();
+        config.useSingleServer().setAddress("redis://192.168.200.131:6379").setPassword("198311");
 
+        return Redisson.create(config);
+    }
 }
