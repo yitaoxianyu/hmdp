@@ -31,7 +31,6 @@ public class RefreshTokenInterceptor implements HandlerInterceptor {
 
         String tokenKey = RedisConstants.LOGIN_USER_KEY + token;
         Map<Object, Object> userMap = stringRedisTemplate.opsForHash().entries(tokenKey);
-
         //这里有异常捕获器，当userMap为空时自动抛出异常
         if(userMap.isEmpty()) return true;
 

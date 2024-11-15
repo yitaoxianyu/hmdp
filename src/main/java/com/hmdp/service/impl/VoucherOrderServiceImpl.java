@@ -144,7 +144,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
     @PostConstruct
     private void init(){
-        SECKILL_ORDER_EXECUTOR.submit(new VoucherOrderHandler());
+//        SECKILL_ORDER_EXECUTOR.submit(new VoucherOrderHandler());
     }
 
     //resource和autowired的区别：
