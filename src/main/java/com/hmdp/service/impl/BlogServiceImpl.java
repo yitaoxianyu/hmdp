@@ -3,14 +3,17 @@ package com.hmdp.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.core.util.StrUtil;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.dto.Result;
 import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.Blog;
+import com.hmdp.entity.Follow;
 import com.hmdp.entity.User;
 import com.hmdp.mapper.BlogMapper;
 import com.hmdp.service.IBlogService;
+import com.hmdp.service.IFollowService;
 import com.hmdp.service.IUserService;
 import com.hmdp.utils.SystemConstants;
 import com.hmdp.utils.UserHolder;
@@ -19,10 +22,7 @@ import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
 import javax.print.attribute.standard.JobName;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -41,6 +41,9 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
     //使用zest来实现点赞列表
     @Resource
     private IUserService userService;
+
+    @Resource
+    private IFollowService followService;
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
@@ -121,6 +124,30 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         return Result.ok(userDTOS);
     }
 
+    @Override
+    public Result saveBlog(Blog blog) {
+        // 获取登录用户
+        UserDTO user = UserHolder.getUser();
+        blog.setUserId(user.getId());
+        // 保存探店博文
+        boolean isSuccess = save(blog);
+        List<Follow> follows = new ArrayList<>();
+        if(isSuccess){
+            //将文章id保存到关注用的收件箱中
+            follows = followService.query().eq("follow_user_id", user.getId()).list();
+        }
+
+        for (Follow follow : follows) {
+            Long userId = follow.getUserId();
+            String key = "feed:" + userId;
+
+            //给用户按时间进行推送，博主发的博客时间越近，则会被优先推送
+            stringRedisTemplate.opsForZSet().add(key,blog.getId().toString(),System.currentTimeMillis());
+        }
+        // 返回id
+        return Result.ok(blog.getId());
+    }
+
     private void queryBlog(Blog blog){
         //解决用户未登录查询首页空指针异常
         UserDTO userDTO = UserHolder.getUser();
@@ -138,5 +165,6 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
 
          Double score = stringRedisTemplate.opsForZSet().score(key, userId.toString());
          blog.setIsLike(score != null);
+
      }
 }

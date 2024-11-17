@@ -1,6 +1,7 @@
 package com.hmdp.config;
 
 
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import io.lettuce.core.RedisURI;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
@@ -39,6 +40,7 @@ public class RedisConfig {
     public RedissonClient redissonClient(){
         Config config = new Config();
         config.useSingleServer().setAddress("redis://192.168.200.131:6379").setPassword("198311");
+
 
         return Redisson.create(config);
     }
