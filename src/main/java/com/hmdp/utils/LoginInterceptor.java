@@ -23,12 +23,7 @@ public class LoginInterceptor implements HandlerInterceptor {
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
         //判断ThreadLocal中是否有用户信息
         UserDTO user = UserHolder.getUser();
-        if(user == null){
-            log.info("1");
-            return true;
-        }
-
-        return true;
+        return user != null;
     }
 
     @Override

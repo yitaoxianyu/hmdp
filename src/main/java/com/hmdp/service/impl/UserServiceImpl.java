@@ -18,12 +18,17 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.connection.BitFieldSubCommands;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.web.config.EnableSpringDataWebSupport;
 import org.springframework.stereotype.Service;
 import com.hmdp.utils.RedisConstants;
 import javax.servlet.http.HttpSession;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -40,6 +45,10 @@ import java.util.concurrent.TimeUnit;
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IUserService {
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
+    @Autowired
+    private EnableSpringDataWebSupport.QuerydslActivator querydslActivator;
+
+    private static final String SIGN_PREFIX = "sign:";
 
     @Override
     public Result sendCode(String phone, HttpSession session) {
@@ -98,6 +107,48 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements IU
         UserDTO user = UserHolder.getUser();
 
         return Result.ok(user);
+    }
+
+    @Override
+    public Result sign() {
+        Long userId = UserHolder.getUser().getId();
+
+        LocalDateTime now = LocalDateTime.now();
+        String format = now.format(DateTimeFormatter.ofPattern(":yyyyMM"));
+        String key = SIGN_PREFIX + userId + format;
+        //今天是几日
+        int dayOfMonth = now.getDayOfMonth();
+
+        stringRedisTemplate.opsForValue().setBit(key,dayOfMonth - 1,true);
+        return Result.ok();
+    }
+
+    @Override
+    public Result signCount() {
+        Long userId = UserHolder.getUser().getId();
+
+        LocalDateTime now = LocalDateTime.now();
+        String format = now.format(DateTimeFormatter.ofPattern(":yyyyMM"));
+        String key = SIGN_PREFIX + userId + format;
+        //今天是几日
+        int dayOfMonth = now.getDayOfMonth();
+
+        List<Long> list = stringRedisTemplate.opsForValue().bitField(key, BitFieldSubCommands.create()
+                .get(BitFieldSubCommands.BitFieldType.unsigned(dayOfMonth)).valueAt(0)
+        );
+
+        if(list == null || list.isEmpty()) return Result.ok(0);
+
+        int count = 0; Long num = list.get(0);
+        while(true){
+            if((num & 1) == 0){
+                break;
+            }else{
+                num = num >> 1;
+                count ++;
+            }
+        }
+        return Result.ok(count);
     }
 
     private User createUserWithPhone(String phone){
